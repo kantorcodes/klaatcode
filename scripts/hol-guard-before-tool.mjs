@@ -6,6 +6,36 @@ import process from 'node:process';
 const MAX_STDIN_BYTES = 1_000_000;
 const GUARD_TIMEOUT_MS = 9_000;
 
+const NON_AUTHORITATIVE_REASON_CODES = new Set([
+  'native_hook_disabled',
+  'native_shadow_diagnostic_disabled',
+  'native_policy_not_ready',
+  'native_hook_event_unavailable',
+  'native_pre_tool_unavailable',
+  'native_post_tool_unavailable',
+  'native_overloaded',
+  'native_hook_worker_unavailable',
+  'native_hook_worker_unavailable_before_compatibility',
+  'native_hook_worker_unsupported',
+  'native_hook_worker_exception',
+  'native_hook_compatibility_disabled',
+  'native_hook_edge_invalid_response',
+  'native_hook_edge_unavailable',
+  'python_hook_oracle_unavailable',
+  'python_oracle_exception',
+  'watch_recording_only',
+  'daemon_hook_queue_capacity',
+  'daemon_hook_deadline_exhausted',
+  'daemon_hook_process_deadline_exhausted',
+  'daemon_hook_process_not_ready',
+  'daemon_hook_process_failed',
+  'daemon_hook_process_invalid_request',
+  'daemon_hook_process_guard_home_mismatch',
+  'daemon_worker_exception',
+  'harness_not_managed',
+  'native_degraded_emergency_safe',
+]);
+
 function block(reason) {
   const message = typeof reason === 'string' && reason.trim()
     ? reason.trim()
@@ -79,23 +109,33 @@ export function decisionFromGuardResponse(response) {
     ? hookSpecific.permissionDecision
     : undefined;
   const policyAction = response.policy_action;
-  const reasonCode = response.reason_code;
-
-  if (
-    permissionDecision === 'allow' &&
-    (policyAction === 'allow' || policyAction === 'warn') &&
-    reasonCode !== 'harness_not_managed'
-  ) {
-    return { allow: true, reason: '' };
-  }
-
+  const reasonCode = typeof response.reason_code === 'string'
+    ? response.reason_code.trim()
+    : '';
   const reason =
     (typeof response.reason === 'string' && response.reason) ||
     (hookSpecific && typeof hookSpecific === 'object' &&
       typeof hookSpecific.permissionDecisionReason === 'string' &&
       hookSpecific.permissionDecisionReason) ||
-    (typeof reasonCode === 'string' && `HOL Guard blocked this command (${reasonCode}).`) ||
+    (reasonCode && `HOL Guard blocked this command (${reasonCode}).`) ||
     'HOL Guard did not return an authoritative allow decision.';
+
+  if (permissionDecision !== 'allow' || !reasonCode) {
+    return { allow: false, reason };
+  }
+
+  if (NON_AUTHORITATIVE_REASON_CODES.has(reasonCode)) {
+    return { allow: false, reason };
+  }
+
+  if (policyAction === 'allow') {
+    return { allow: true, reason: '' };
+  }
+
+  if (policyAction === 'warn' && reasonCode === 'native_policy_warning') {
+    return { allow: true, reason: '' };
+  }
+
   return { allow: false, reason };
 }
 
