@@ -39,10 +39,10 @@ test('builds complete PreToolUse command envelope', () => {
   );
 });
 
-test('allows only native allow or warn decisions rendered as allow', () => {
+test('allows authoritative native allow and policy warning decisions', () => {
   assert.equal(decisionFromGuardResponse({
     policy_action: 'allow',
-    reason_code: 'native_pre_tool_allow',
+    reason_code: 'native_exact_safe_command',
     hookSpecificOutput: { permissionDecision: 'allow' },
   }).allow, true);
   assert.equal(decisionFromGuardResponse({
@@ -52,11 +52,28 @@ test('allows only native allow or warn decisions rendered as allow', () => {
   }).allow, true);
 });
 
-test('blocks review, block, malformed, and unmanaged passthrough responses', () => {
+test('fails closed on unavailable and non-authoritative warn decisions', () => {
+  for (const reason_code of [
+    'native_pre_tool_unavailable',
+    'native_policy_not_ready',
+    'native_hook_worker_unavailable',
+    'harness_not_managed',
+    'future_unknown_warning',
+  ]) {
+    assert.equal(decisionFromGuardResponse({
+      policy_action: 'warn',
+      reason_code,
+      reason: 'Guard did not complete an authoritative review.',
+      hookSpecificOutput: { permissionDecision: 'allow' },
+    }).allow, false, reason_code);
+  }
+});
+
+test('blocks review, block, malformed, and missing-reason responses', () => {
   for (const response of [
-    { policy_action: 'review', hookSpecificOutput: { permissionDecision: 'deny' } },
-    { policy_action: 'block', hookSpecificOutput: { permissionDecision: 'deny' } },
-    { policy_action: 'allow', reason_code: 'harness_not_managed', hookSpecificOutput: { permissionDecision: 'allow' } },
+    { policy_action: 'review', reason_code: 'native_command_review_required', hookSpecificOutput: { permissionDecision: 'deny' } },
+    { policy_action: 'block', reason_code: 'native_destructive_command', hookSpecificOutput: { permissionDecision: 'deny' } },
+    { policy_action: 'allow', hookSpecificOutput: { permissionDecision: 'allow' } },
     {},
   ]) {
     assert.equal(decisionFromGuardResponse(response).allow, false);
