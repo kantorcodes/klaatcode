@@ -101,13 +101,24 @@ function parseGuardJson(stdout) {
 }
 
 export function decisionFromGuardResponse(response) {
-  if (!response || typeof response !== 'object') {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) {
     return { allow: false, reason: 'HOL Guard returned an invalid response.' };
   }
   const hookSpecific = response.hookSpecificOutput;
   const permissionDecision = hookSpecific && typeof hookSpecific === 'object'
     ? hookSpecific.permissionDecision
     : undefined;
+  // Native hook responses are event-bound; a mismatched or explicitly stopped
+  // response cannot authorize a Klaat before_tool invocation. Historic local
+  // fixtures omit hookEventName, so retain their behavior until updated.
+  if (hookSpecific && typeof hookSpecific === 'object' &&
+      hookSpecific.hookEventName !== undefined &&
+      hookSpecific.hookEventName !== 'PreToolUse') {
+    return { allow: false, reason: 'HOL Guard returned a different hook event.' };
+  }
+  if (response.continue === false || response.decision === 'deny') {
+    return { allow: false, reason: 'HOL Guard refused tool continuation.' };
+  }
   const policyAction = response.policy_action;
   const reasonCode = typeof response.reason_code === 'string'
     ? response.reason_code.trim()
@@ -128,7 +139,11 @@ export function decisionFromGuardResponse(response) {
     return { allow: false, reason };
   }
 
-  if (policyAction === 'allow') {
+  // A superficially allow-shaped response with a destructive/review reason
+  // must not bypass Guard's native classifier. Unknown reasons fail closed.
+  const provenAllowReason = reasonCode.startsWith('native_exact_') ||
+    reasonCode === 'native_policy_allow' || reasonCode === 'native_custom_mcp_tool_allow';
+  if (policyAction === 'allow' && provenAllowReason) {
     return { allow: true, reason: '' };
   }
 
