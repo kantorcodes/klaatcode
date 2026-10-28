@@ -30,7 +30,7 @@ The proposed PR branch contains the JavaScript adapter `scripts/hol-guard-before
 5. Allows an authoritative native `allow` decision, or the explicit `native_policy_warning` allow-with-warning result.
 6. Fails closed when native review is unavailable or not ready, including `native_pre_tool_unavailable`, `native_policy_not_ready`, worker/daemon availability failures, unmanaged-harness passthrough, unknown warning results, malformed output, timeout, missing Guard, review, reapproval, sandbox-required, or block.
 
-The adapter does not use `hol-guard command explain` as enforcement authority.
+The adapter does not use `hol-guard command explain` as enforcement authority. The `--json` response must be one complete JSON object on stdout; a diagnostic prefix, suffix, or multiple verdicts fails closed instead of letting the adapter extract a possibly misleading allow result.
 
 ## Validation completed
 
