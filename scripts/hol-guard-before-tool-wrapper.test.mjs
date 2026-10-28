@@ -43,13 +43,13 @@ test('wrapper preserves JSON block sent on stdout', { skip: !posix }, () => {
 test('wrapper converts adapter runtime failure into Klaat blocking exit 2', { skip: !posix }, () => {
   const result = runWrapper('process.exit(7);');
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /failed \\(exit 7\\)/);
+  assert.match(result.stderr, /failed \(exit 7\)/);
 });
 
 test('wrapper converts absent adapter into Klaat blocking exit 2', { skip: !posix }, () => {
   const result = runWrapper(null);
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /failed \\(exit /);
+  assert.match(result.stderr, /failed \(exit /);
 });
 
 // The host's hook timeout must exceed the adapter's own 9-second deadline.
