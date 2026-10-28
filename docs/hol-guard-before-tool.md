@@ -1,6 +1,6 @@
 # HOL Guard `before_tool` adapter packet
 
-Status: owned-fork implementation and tests prepared. This is not an upstream integration or a release artifact.
+Status (updated October 28, 2026): HOL-authored adapter proposed for independent review in [Klaat Code PR #68](https://github.com/KlaatAI/klaatcode/pull/68). The PR is open, not merged or released. This document corrects the earlier pre-submission status; it does not claim third-party approval or adoption.
 
 ## Why this maps cleanly
 
@@ -19,9 +19,9 @@ Klaat Code blocks a tool call when the hook exits with status `2` or writes a JS
 
 HOL Guard already has native pre-tool authority for command decisions. The supported native request is a versioned `PreToolUse` envelope whose `tool_input.command` contains the command string. The Rust runtime owns the security decision. The adapter transports and renders that result rather than reimplementing Guard policy in Klaat Code.
 
-## Prepared adapter behavior
+## Proposed adapter behavior
 
-The owned fork contains `scripts/hol-guard-before-tool.mjs`. For `tool_name == "run_command"` it:
+The proposed PR branch contains `scripts/hol-guard-before-tool.mjs`. For `tool_name == "run_command"` it:
 
 1. Parses `tool_args` as JSON.
 2. Extracts the non-empty `command` string. Missing or malformed command input fails closed.
@@ -54,11 +54,11 @@ With no resident native policy authority initialized, `hol-guard hook --harness 
 
 The first adapter version treated a generic `warn` plus `permissionDecision: allow` as sufficient and therefore would have allowed that unavailable state. The owned-fork adapter now rejects Guard availability and not-ready reason codes and rejects unknown warning results. Re-running the adapter against the same real 3.4.2 runtime now emits Klaat's block result for both test commands while Guard authority is unavailable.
 
-This closes the unavailable-runtime fail-open defect. It does not yet prove the final authoritative allow/deny path.
+This closes the unavailable-runtime fail-open defect seen in the initial test. The [PR description](https://github.com/KlaatAI/klaatcode/pull/68) additionally reports a later isolated HOL Guard 3.4.2 native-runtime test with benign allows and a destructive-command block. That later assertion is a contributor report, not an independent maintainer acceptance or a raw test log reproduced in this document.
 
-## Remaining real-runtime gate
+## Independent review and real-runtime validation
 
-The implementation is not ready for upstream submission until an isolated managed Guard runtime can produce authoritative native decisions for these cases:
+The implementation has already been submitted for independent upstream review in PR #68. A reviewer should reproduce these cases with an isolated managed Guard runtime rather than relying only on contributor-reported results:
 
 | Case | Expected result |
 | --- | --- |
@@ -69,9 +69,9 @@ The implementation is not ready for upstream submission until an isolated manage
 | malformed `tool_args` | fail closed |
 | Guard runtime unavailable | fail closed |
 
-The deny-path test must prove that the target command is not executed.
+The denial test must verify that the target command was not executed. The PR description reports a sentinel test; the exact runtime transcript is not reproduced in this document.
 
-An isolated `hol-guard install codex` attempt in the validation sandbox did not establish that authority because Guard rejected the sandbox interpreter as writable by another user. No real user installation was modified. A clean authoritative setup remains required before upstream submission.
+An earlier isolated `hol-guard install codex` attempt did not establish authority because Guard rejected the sandbox interpreter as writable by another user. No real user installation was modified. The PR description reports a later successful managed-runtime test; that proof should be independently replayed before merge.
 
 ## Candidate hook configuration
 
@@ -90,14 +90,14 @@ The adapter should remain project-local until there is a stable shipped integrat
 
 The current upstream README example points at `./scripts/guard-shell.sh`, but that helper is not present in the repository. This owned-fork candidate supplies the missing executable behavior without changing Klaat's hook semantics.
 
-## Upstream gate
+## Acceptance and release gates
 
-Before any upstream PR:
+Before merge or release:
 
 - revalidate the current Klaat Code upstream head, hook payload, block semantics, contribution guidance, and queue ownership;
 - revalidate HOL Guard's current native hook entry point;
 - keep Klaat Code typecheck/build plus focused adapter tests green;
 - prove one authoritative allow path and one authoritative deny path with the real Guard runtime, including target command non-execution on deny;
-- confirm the contribution still fits current Distribution WIP and maintainer-conversion gates.
+- get independent Klaat maintainer review and check the current PR branch against the upstream contribution rules.
 
-Until those gates pass, this remains owned-fork preparation and carries no strict outcome value.
+Until independent upstream approval/merge and a separate usable release, PR #68 remains a HOL-authored proposal. It is not an externally authored PR, a tagged extension release, or independently measured nonauthor adoption.
