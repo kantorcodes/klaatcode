@@ -81,11 +81,17 @@ test('blocks review, block, malformed, and missing-reason responses', () => {
   }
 });
 
-test('rejects multiple machine verdicts even when the final one allows', () => {
+test('accepts one complete verdict, but never extracts an allow from mixed stdout', () => {
   const allowed = '{"policy_action":"allow","reason_code":"native_policy_allow","hookSpecificOutput":{"permissionDecision":"allow"}}';
   const denied = '{"policy_action":"block","reason_code":"policy_block","hookSpecificOutput":{"permissionDecision":"deny"}}';
-  assert.equal(parseGuardJson(`log\n${allowed}`)?.policy_action, 'allow');
-  for (const output of [`${denied}\n${allowed}`, `${allowed}\n${denied}`, `${allowed}\n${allowed}`]) {
+  assert.equal(parseGuardJson(`  \n${allowed}\n  `)?.policy_action, 'allow');
+  for (const output of [
+    `diagnostic\n${allowed}`,
+    `${allowed}\ndiagnostic`,
+    `${denied}\n${allowed}`,
+    `${allowed}\n${denied}`,
+    `${allowed}\n${allowed}`,
+  ]) {
     assert.equal(parseGuardJson(output), null);
   }
 });
