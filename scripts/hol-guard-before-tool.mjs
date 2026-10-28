@@ -144,7 +144,8 @@ export function decisionFromGuardResponse(response) {
 
   // A superficially allow-shaped response with a destructive/review reason
   // must not bypass Guard's native classifier. Unknown reasons fail closed.
-  const provenAllowReason = reasonCode.startsWith('native_exact_') ||
+  const provenAllowReason = reasonCode.startsWith('native_exact_safe_') ||
+    reasonCode === 'native_exact_introspection_command' ||
     reasonCode === 'native_policy_allow' || reasonCode === 'native_custom_mcp_tool_allow';
   if (policyAction === 'allow' && provenAllowReason) {
     return { allow: true, reason: '' };
