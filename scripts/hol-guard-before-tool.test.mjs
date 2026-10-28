@@ -44,13 +44,28 @@ test('allows authoritative native allow and policy warning decisions', () => {
   assert.equal(decisionFromGuardResponse({
     policy_action: 'allow',
     reason_code: 'native_exact_safe_command',
-    hookSpecificOutput: { permissionDecision: 'allow' },
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' },
   }).allow, true);
   assert.equal(decisionFromGuardResponse({
     policy_action: 'warn',
     reason_code: 'native_policy_warning',
-    hookSpecificOutput: { permissionDecision: 'allow' },
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' },
   }).allow, true);
+});
+
+test('rejects absent, malformed, and mismatched event envelopes', () => {
+  for (const hookSpecificOutput of [
+    { permissionDecision: 'allow' },
+    { hookEventName: 'PostToolUse', permissionDecision: 'allow' },
+    null,
+    [],
+  ]) {
+    assert.equal(decisionFromGuardResponse({
+      policy_action: 'allow',
+      reason_code: 'native_policy_allow',
+      hookSpecificOutput,
+    }).allow, false);
+  }
 });
 
 test('fails closed on unavailable and non-authoritative warn decisions', () => {
@@ -65,7 +80,7 @@ test('fails closed on unavailable and non-authoritative warn decisions', () => {
       policy_action: 'warn',
       reason_code,
       reason: 'Guard did not complete an authoritative review.',
-      hookSpecificOutput: { permissionDecision: 'allow' },
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' },
     }).allow, false, reason_code);
   }
 });
@@ -74,7 +89,7 @@ test('blocks review, block, malformed, and missing-reason responses', () => {
   for (const response of [
     { policy_action: 'review', reason_code: 'native_command_review_required', hookSpecificOutput: { permissionDecision: 'deny' } },
     { policy_action: 'block', reason_code: 'native_destructive_command', hookSpecificOutput: { permissionDecision: 'deny' } },
-    { policy_action: 'allow', hookSpecificOutput: { permissionDecision: 'allow' } },
+    { policy_action: 'allow', hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } },
     {},
   ]) {
     assert.equal(decisionFromGuardResponse(response).allow, false);
@@ -100,7 +115,7 @@ test('explicit stop fields override otherwise authoritative allows', () => {
   const allowed = {
     policy_action: 'allow',
     reason_code: 'native_policy_allow',
-    hookSpecificOutput: { permissionDecision: 'allow' },
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' },
   };
   for (const stopped of [
     { continue: false },
