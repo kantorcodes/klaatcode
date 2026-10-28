@@ -80,23 +80,25 @@ export function buildGuardPayload(payload, command) {
   return guardPayload;
 }
 
-function parseGuardJson(stdout) {
+export function parseGuardJson(stdout) {
   const text = typeof stdout === 'string' ? stdout.trim() : '';
   if (!text) return null;
   try {
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
-    for (const line of text.split(/\r?\n/).reverse()) {
-      const candidate = line.trim();
-      if (!candidate) continue;
+    const verdicts = [];
+    for (const line of text.split(/\r?\n/)) {
       try {
-        const parsed = JSON.parse(candidate);
-        if (parsed && typeof parsed === 'object') return parsed;
+        const parsed = JSON.parse(line.trim());
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          verdicts.push(parsed);
+        }
       } catch {
-        // Keep looking for the final JSON response line.
+        // Plain-text diagnostics are allowed, but ambiguous verdicts are not.
       }
     }
-    return null;
+    return verdicts.length === 1 ? verdicts[0] : null;
   }
 }
 
@@ -116,7 +118,8 @@ export function decisionFromGuardResponse(response) {
       hookSpecific.hookEventName !== 'PreToolUse') {
     return { allow: false, reason: 'HOL Guard returned a different hook event.' };
   }
-  if (response.continue === false || response.decision === 'deny') {
+  if (('continue' in response && response.continue !== true) ||
+      ('decision' in response && response.decision !== 'allow')) {
     return { allow: false, reason: 'HOL Guard refused tool continuation.' };
   }
   const policyAction = response.policy_action;
