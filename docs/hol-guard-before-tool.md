@@ -27,7 +27,7 @@ The proposed PR branch contains the JavaScript adapter `scripts/hol-guard-before
 2. Extracts the non-empty `command` string. Missing or malformed command input fails closed.
 3. Constructs a Guard `PreToolUse` request with the current project as `cwd`.
 4. Sends the complete request through `hol-guard hook --harness codex --json`, with the workspace when available, so Guard's native hook authority remains the decision owner.
-5. Allows an authoritative native `allow` decision, or the explicit `native_policy_warning` allow-with-warning result.
+5. Requires `hookSpecificOutput.hookEventName` to be `PreToolUse`, then allows an authoritative native `allow` decision or the explicit `native_policy_warning` allow-with-warning result. Missing or mismatched event binding fails closed.
 6. Fails closed when native review is unavailable or not ready, including `native_pre_tool_unavailable`, `native_policy_not_ready`, worker/daemon availability failures, unmanaged-harness passthrough, unknown warning results, malformed output, timeout, missing Guard, review, reapproval, sandbox-required, or block.
 
 The adapter does not use `hol-guard command explain` as enforcement authority. The `--json` response must be one complete JSON object on stdout; a diagnostic prefix, suffix, or multiple verdicts fails closed instead of letting the adapter extract a possibly misleading allow result.
