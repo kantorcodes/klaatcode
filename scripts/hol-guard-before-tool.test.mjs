@@ -4,6 +4,7 @@ import {
   buildGuardPayload,
   decisionFromGuardResponse,
   extractKlaatCommand,
+  parseGuardJson,
 } from './hol-guard-before-tool.mjs';
 
 test('extracts run_command command from Klaat tool_args', () => {
@@ -77,5 +78,33 @@ test('blocks review, block, malformed, and missing-reason responses', () => {
     {},
   ]) {
     assert.equal(decisionFromGuardResponse(response).allow, false);
+  }
+});
+
+test('rejects multiple machine verdicts even when the final one allows', () => {
+  const allowed = '{"policy_action":"allow","reason_code":"native_policy_allow","hookSpecificOutput":{"permissionDecision":"allow"}}';
+  const denied = '{"policy_action":"block","reason_code":"policy_block","hookSpecificOutput":{"permissionDecision":"deny"}}';
+  assert.equal(parseGuardJson(`log\n${allowed}`)?.policy_action, 'allow');
+  for (const output of [`${denied}\n${allowed}`, `${allowed}\n${denied}`, `${allowed}\n${allowed}`]) {
+    assert.equal(parseGuardJson(output), null);
+  }
+});
+
+test('explicit stop fields override otherwise authoritative allows', () => {
+  const allowed = {
+    policy_action: 'allow',
+    reason_code: 'native_policy_allow',
+    hookSpecificOutput: { permissionDecision: 'allow' },
+  };
+  for (const stopped of [
+    { continue: false },
+    { continue: 'false' },
+    { continue: 0 },
+    { decision: 'deny' },
+    { decision: 'review' },
+    { decision: 'block' },
+    { decision: 0 },
+  ]) {
+    assert.equal(decisionFromGuardResponse({ ...allowed, ...stopped }).allow, false);
   }
 });
