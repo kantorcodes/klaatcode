@@ -87,18 +87,8 @@ export function parseGuardJson(stdout) {
     const parsed = JSON.parse(text);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
-    const verdicts = [];
-    for (const line of text.split(/\r?\n/)) {
-      try {
-        const parsed = JSON.parse(line.trim());
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          verdicts.push(parsed);
-        }
-      } catch {
-        // Plain-text diagnostics are allowed, but ambiguous verdicts are not.
-      }
-    }
-    return verdicts.length === 1 ? verdicts[0] : null;
+    // A diagnostic line or second verdict cannot authorize execution.
+    return null;
   }
 }
 
