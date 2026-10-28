@@ -21,7 +21,7 @@ HOL Guard already has native pre-tool authority for command decisions. The suppo
 
 ## Proposed adapter behavior
 
-The proposed PR branch contains `scripts/hol-guard-before-tool.mjs`. For `tool_name == "run_command"` it:
+The proposed PR branch contains the JavaScript adapter `scripts/hol-guard-before-tool.mjs` and a POSIX fail-closed launcher `scripts/hol-guard-before-tool.sh`. For `tool_name == "run_command"` it:
 
 1. Parses `tool_args` as JSON.
 2. Extracts the non-empty `command` string. Missing or malformed command input fails closed.
@@ -40,6 +40,7 @@ The following checks pass:
 
 - `node --check scripts/hol-guard-before-tool.mjs`
 - `node --test scripts/hol-guard-before-tool.test.mjs`, 7/7 focused tests
+- `node --test scripts/hol-guard-before-tool-wrapper.test.mjs`, 4/4 isolated POSIX launcher tests (October 28; not upstream CI)
 - `bun install --frozen-lockfile`
 - `bun run typecheck`
 - `bun run build`
@@ -75,20 +76,25 @@ An earlier isolated `hol-guard install codex` attempt did not establish authorit
 
 ## Candidate hook configuration
 
-The adapter should remain project-local until there is a stable shipped integration surface:
+This is an **unreleased, project-local proposal**, not a component shipped by Klaat Code or HOL Guard. Copy **both** `scripts/hol-guard-before-tool.sh` and `scripts/hol-guard-before-tool.mjs` from the reviewed PR branch into your project's `scripts/` directory. Do not assume these scripts are included in the npm package: Klaat's current `package.json` publishes only its built CLI, README, and license.
 
 ```json
 {
   "before_tool": [
     {
       "matcher": "run_command",
-      "command": "node ./scripts/hol-guard-before-tool.mjs"
+      "command": "sh ./scripts/hol-guard-before-tool.sh",
+      "timeout": 12
     }
   ]
 }
 ```
 
-The current upstream README example points at `./scripts/guard-shell.sh`, but that helper is not present in the repository. This owned-fork candidate supplies the missing executable behavior without changing Klaat's hook semantics.
+Klaat's current hook runner treats exit status **2** or an explicit JSON block as denial, but ignores other failed shell exits and timeouts. The POSIX launcher therefore converts missing Node, missing adapter, and unexpected adapter failures to exit **2** rather than silently allowing the command. The host timeout is set above the adapter's 9-second Guard deadline so the adapter can return its own block verdict first.
+
+**Limit:** This does not fix a missing `sh` interpreter, a missing *launcher itself*, or a host timeout before the launcher can report a verdict. Klaat currently fails open in those cases. A separate upstream hook-runner change to fail closed on every nonzero exit, start failure, and timeout would be needed before treating this as a general enforcement boundary. Do not represent the PR as a shipped security guarantee.
+
+The current upstream README example points at `./scripts/guard-shell.sh`, but that helper is not present in the repository. This PR supplies an opt-in adapter, not a replacement for Klaat's global hook-failure semantics.
 
 ## Acceptance and release gates
 
