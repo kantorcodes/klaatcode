@@ -97,17 +97,13 @@ export function decisionFromGuardResponse(response) {
     return { allow: false, reason: 'HOL Guard returned an invalid response.' };
   }
   const hookSpecific = response.hookSpecificOutput;
-  const permissionDecision = hookSpecific && typeof hookSpecific === 'object'
-    ? hookSpecific.permissionDecision
-    : undefined;
-  // Native hook responses are event-bound; a mismatched or explicitly stopped
-  // response cannot authorize a Klaat before_tool invocation. Historic local
-  // fixtures omit hookEventName, so retain their behavior until updated.
-  if (hookSpecific && typeof hookSpecific === 'object' &&
-      hookSpecific.hookEventName !== undefined &&
-      hookSpecific.hookEventName !== 'PreToolUse') {
-    return { allow: false, reason: 'HOL Guard returned a different hook event.' };
+  // Only a concrete PreToolUse verdict is an authorization for this hook.
+  // A missing event name must fail closed just like a mismatched event.
+  if (!hookSpecific || typeof hookSpecific !== 'object' ||
+      Array.isArray(hookSpecific) || hookSpecific.hookEventName !== 'PreToolUse') {
+    return { allow: false, reason: 'HOL Guard returned no matching PreToolUse event.' };
   }
+  const permissionDecision = hookSpecific.permissionDecision;
   if (('continue' in response && response.continue !== true) ||
       ('decision' in response && response.decision !== 'allow')) {
     return { allow: false, reason: 'HOL Guard refused tool continuation.' };
