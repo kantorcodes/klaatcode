@@ -101,10 +101,46 @@ export function buildGuardPayload(payload, command) {
   return guardPayload;
 }
 
+// Standard JSON.parse keeps the last repeated field. Refuse duplicate keys
+// before an allow-shaped response can erase an earlier deny or review.
+function containsDuplicateGuardKeys(raw) {
+  const frames = [];
+  for (let i = 0; i < raw.length;) {
+    const char = raw[i];
+    if (char === '"') {
+      const start = i++;
+      while (i < raw.length) {
+        if (raw[i] === "\\") {
+          i += 2;
+          continue;
+        }
+        if (raw[i++] === '"') break;
+      }
+      const frame = frames[frames.length - 1];
+      if (frame?.isObject && frame.expectKey) {
+        const key = JSON.parse(raw.slice(start, i));
+        if (frame.keys.has(key)) return true;
+        frame.keys.add(key);
+        frame.expectKey = false;
+      }
+      continue;
+    }
+    if (char === '{') frames.push({ isObject: true, expectKey: true, keys: new Set() });
+    else if (char === '[') frames.push({ isObject: false });
+    else if (char === '}' || char === ']') frames.pop();
+    else if (char === ',' && frames[frames.length - 1]?.isObject) {
+      frames[frames.length - 1].expectKey = true;
+    }
+    i++;
+  }
+  return false;
+}
+
 export function parseGuardJson(stdout) {
   const text = typeof stdout === 'string' ? stdout.trim() : '';
   if (!text) return null;
   try {
+    if (containsDuplicateGuardKeys(text)) return null;
     const parsed = JSON.parse(text);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
