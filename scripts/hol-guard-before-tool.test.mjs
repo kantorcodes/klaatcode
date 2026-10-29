@@ -178,3 +178,15 @@ test('denies an unknown execution directory instead of inspecting the wrong tree
     /workdir must be a string/,
   );
 });
+
+test('rejects relative project roots before choosing the Guard workspace', () => {
+  for (const project_root of ['.', 'relative/repo', '']) {
+    assert.throws(
+      () => resolveKlaatCommandCwd({
+        project_root,
+        tool_args: JSON.stringify({ command: 'git status' }),
+      }),
+      /project_root must be an absolute path/,
+    );
+  }
+});
