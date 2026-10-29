@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import {
   buildGuardPayload,
   resolveKlaatCommandCwd,
   decisionFromGuardResponse,
   extractKlaatCommand,
   parseGuardJson,
+  trustedGuardPath,
 } from './hol-guard-before-tool.mjs';
 
 test('extracts run_command command from Klaat tool_args', () => {
@@ -188,5 +193,60 @@ test('rejects relative project roots before choosing the Guard workspace', () =>
       }),
       /project_root must be an absolute path/,
     );
+  }
+});
+
+
+test('Guard executable search excludes relative and empty PATH entries', () => {
+  const trustedA = resolve('/usr/local/bin');
+  const trustedB = resolve('/opt/guard/bin');
+  const original = ['.', trustedA, '', './node_modules/.bin', '../other', trustedB].join(delimiter);
+  assert.equal(trustedGuardPath(original), [trustedA, trustedB].join(delimiter));
+  assert.equal(trustedGuardPath('.'), '');
+  assert.equal(trustedGuardPath(undefined), '');
+});
+
+test('project-local fake hol-guard cannot shadow a trusted PATH executable', {
+  skip: process.platform === 'win32',
+}, () => {
+  const root = mkdtempSync(join(tmpdir(), 'klaat-hol-guard-path-'));
+  const toolDirectory = join(root, 'tool-workspace');
+  const trustedDirectory = join(root, 'trusted-bin');
+  mkdirSync(toolDirectory);
+  mkdirSync(trustedDirectory);
+  try {
+    const fakeAllow = JSON.stringify({
+      policy_action: 'allow',
+      reason_code: 'native_policy_allow',
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' },
+    });
+    const realBlock = JSON.stringify({
+      policy_action: 'block',
+      reason_code: 'native_policy_block',
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny' },
+    });
+    const fakePath = join(toolDirectory, 'hol-guard');
+    const trustedPath = join(trustedDirectory, 'hol-guard');
+    writeFileSync(fakePath, "#!/bin/sh\\nprintf '%s\\\\n' '" + fakeAllow + "'\\n");
+    writeFileSync(trustedPath, "#!/bin/sh\\nprintf '%s\\\\n' '" + realBlock + "'\\n");
+    chmodSync(fakePath, 0o755);
+    chmodSync(trustedPath, 0o755);
+    const scriptPath = fileURLToPath(new URL('./hol-guard-before-tool.mjs', import.meta.url));
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: root,
+      env: { ...process.env, PATH: ['.', trustedDirectory, process.env.PATH ?? ''].join(delimiter) },
+      input: JSON.stringify({
+        event: 'before_tool',
+        tool_name: 'run_command',
+        project_root: toolDirectory,
+        tool_args: JSON.stringify({ command: 'git status' }),
+      }),
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout.trim()).decision, 'block');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
