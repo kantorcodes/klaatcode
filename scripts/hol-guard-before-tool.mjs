@@ -86,7 +86,7 @@ export function resolveKlaatCommandCwd(payload) {
     const parsed = JSON.parse(payload.tool_args);
     workdir = parsed?.workdir;
   }
-  if (!workdir) return root;
+  if (workdir === undefined || workdir === null || workdir === '') return root;
   if (typeof workdir !== 'string') {
     throw new Error('run_command workdir must be a string');
   }
