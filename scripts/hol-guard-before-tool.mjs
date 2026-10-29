@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
@@ -68,8 +68,8 @@ export function extractKlaatCommand(payload) {
 
 export function resolveKlaatCommandCwd(payload) {
   const root = payload?.project_root;
-  if (typeof root !== 'string' || !root.trim()) {
-    throw new Error('run_command project_root is missing');
+  if (typeof root !== 'string' || !root.trim() || !isAbsolute(root)) {
+    throw new Error('run_command project_root must be an absolute path');
   }
   let workdir;
   if (typeof payload.tool_args === 'string') {
@@ -82,7 +82,11 @@ export function resolveKlaatCommandCwd(payload) {
   }
   // Match Klaat's runCommand/safeResolve logic, including tilde paths.
   if (workdir.startsWith('/') || workdir.startsWith('~')) {
-    return workdir.replace(/^~/, process.env.HOME ?? '~');
+    const expanded = workdir.replace(/^~/, process.env.HOME ?? '~');
+    if (!isAbsolute(expanded)) {
+      throw new Error('run_command effective workdir must be an absolute path');
+    }
+    return expanded;
   }
   return resolve(root, workdir);
 }
