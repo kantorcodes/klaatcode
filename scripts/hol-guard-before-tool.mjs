@@ -1,11 +1,21 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { isAbsolute, resolve } from 'node:path';
+import { delimiter, isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
 const MAX_STDIN_BYTES = 1_000_000;
 const GUARD_TIMEOUT_MS = 9_000;
+
+// The hook switches cwd to the tool directory. Relative PATH entries would
+// then resolve there and could select a different, project-local hol-guard.
+// Only absolute search directories may be used for Guard's executable lookup.
+export function trustedGuardPath(pathValue) {
+  if (typeof pathValue !== 'string') return '';
+  return pathValue.split(delimiter)
+    .filter((entry) => entry && isAbsolute(entry))
+    .join(delimiter);
+}
 
 const NON_AUTHORITATIVE_REASON_CODES = new Set([
   'native_hook_disabled',
@@ -243,12 +253,25 @@ export async function main() {
   }
   args.push('--json');
 
+  const guardPathKey = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH');
+  const guardPath = trustedGuardPath(guardPathKey ? process.env[guardPathKey] : '');
+  if (!guardPath) {
+    block('HOL Guard needs an absolute trusted executable search path.');
+    return;
+  }
+  const guardEnv = { ...process.env };
+  for (const key of Object.keys(guardEnv)) {
+    if (key.toUpperCase() === 'PATH') delete guardEnv[key];
+  }
+  guardEnv.PATH = guardPath;
+
   const result = spawnSync('hol-guard', args, {
     input: `${JSON.stringify(guardPayload)}\n`,
     encoding: 'utf8',
     timeout: GUARD_TIMEOUT_MS,
     maxBuffer: MAX_STDIN_BYTES,
     cwd: guardPayload.cwd,
+    env: guardEnv,
     windowsHide: true,
   });
 
