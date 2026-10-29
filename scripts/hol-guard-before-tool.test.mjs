@@ -170,6 +170,17 @@ test('matches the effective run_command workdir for Guard inspection', () => {
   }
 });
 
+test('rejects falsey non-string workdirs before Guard inspects a different directory', () => {
+  for (const workdir of [false, 0]) {
+    const payload = {
+      project_root: '/repo',
+      tool_args: JSON.stringify({ command: 'git status', workdir }),
+    };
+    assert.throws(() => resolveKlaatCommandCwd(payload), /workdir must be a string/);
+    assert.throws(() => buildGuardPayload(payload, 'git status'), /workdir must be a string/);
+  }
+});
+
 test('denies an unknown execution directory instead of inspecting the wrong tree', () => {
   assert.throws(
     () => resolveKlaatCommandCwd({ tool_args: JSON.stringify({ command: 'git status' }) }),
