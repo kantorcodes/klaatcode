@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { resolve } from 'node:path';
 import {
   buildGuardPayload,
+  resolveKlaatCommandCwd,
   decisionFromGuardResponse,
   extractKlaatCommand,
   parseGuardJson,
@@ -128,4 +130,36 @@ test('explicit stop fields override otherwise authoritative allows', () => {
   ]) {
     assert.equal(decisionFromGuardResponse({ ...allowed, ...stopped }).allow, false);
   }
+});
+
+
+test('matches the effective run_command workdir for Guard inspection', () => {
+  const root = '/repo';
+  for (const [workdir, expected] of [
+    ['nested', resolve(root, 'nested')],
+    ['/tmp/other-worktree', '/tmp/other-worktree'],
+    ['', root],
+  ]) {
+    const payload = {
+      session_id: 's1',
+      project_root: root,
+      tool_args: JSON.stringify({ command: 'git status', workdir }),
+    };
+    assert.equal(resolveKlaatCommandCwd(payload), expected);
+    assert.equal(buildGuardPayload(payload, 'git status').cwd, expected);
+  }
+});
+
+test('denies an unknown execution directory instead of inspecting the wrong tree', () => {
+  assert.throws(
+    () => resolveKlaatCommandCwd({ tool_args: JSON.stringify({ command: 'git status' }) }),
+    /project_root/,
+  );
+  assert.throws(
+    () => resolveKlaatCommandCwd({
+      project_root: '/repo',
+      tool_args: JSON.stringify({ command: 'git status', workdir: ['elsewhere'] }),
+    }),
+    /workdir must be a string/,
+  );
 });
