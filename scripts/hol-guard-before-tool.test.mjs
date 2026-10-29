@@ -227,8 +227,8 @@ test('project-local fake hol-guard cannot shadow a trusted PATH executable', {
     });
     const fakePath = join(toolDirectory, 'hol-guard');
     const trustedPath = join(trustedDirectory, 'hol-guard');
-    writeFileSync(fakePath, "#!/bin/sh\\nprintf '%s\\\\n' '" + fakeAllow + "'\\n");
-    writeFileSync(trustedPath, "#!/bin/sh\\nprintf '%s\\\\n' '" + realBlock + "'\\n");
+    writeFileSync(fakePath, "#!/bin/sh\nprintf '%s\\n' '" + fakeAllow + "'\n");
+    writeFileSync(trustedPath, "#!/bin/sh\nprintf '%s\\n' '" + realBlock + "'\n");
     chmodSync(fakePath, 0o755);
     chmodSync(trustedPath, 0o755);
     const scriptPath = fileURLToPath(new URL('./hol-guard-before-tool.mjs', import.meta.url));
