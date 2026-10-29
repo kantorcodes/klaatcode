@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
@@ -65,17 +66,37 @@ export function extractKlaatCommand(payload) {
   return args.command;
 }
 
+export function resolveKlaatCommandCwd(payload) {
+  const root = payload?.project_root;
+  if (typeof root !== 'string' || !root.trim()) {
+    throw new Error('run_command project_root is missing');
+  }
+  let workdir;
+  if (typeof payload.tool_args === 'string') {
+    const parsed = JSON.parse(payload.tool_args);
+    workdir = parsed?.workdir;
+  }
+  if (!workdir) return root;
+  if (typeof workdir !== 'string') {
+    throw new Error('run_command workdir must be a string');
+  }
+  // Match Klaat's runCommand/safeResolve logic, including tilde paths.
+  if (workdir.startsWith('/') || workdir.startsWith('~')) {
+    return workdir.replace(/^~/, process.env.HOME ?? '~');
+  }
+  return resolve(root, workdir);
+}
+
 export function buildGuardPayload(payload, command) {
   const guardPayload = {
     hook_event_name: 'PreToolUse',
     tool_name: 'Bash',
     tool_input: { command },
+    // Guard must inspect from the same directory as run_command executes.
+    cwd: resolveKlaatCommandCwd(payload),
   };
   if (typeof payload.session_id === 'string' && payload.session_id) {
     guardPayload.session_id = payload.session_id;
-  }
-  if (typeof payload.project_root === 'string' && payload.project_root) {
-    guardPayload.cwd = payload.project_root;
   }
   return guardPayload;
 }
@@ -166,15 +187,16 @@ export async function main() {
   }
 
   let command;
+  let guardPayload;
   try {
     command = extractKlaatCommand(payload);
+    if (command !== null) guardPayload = buildGuardPayload(payload, command);
   } catch (error) {
     block(error instanceof Error ? error.message : 'invalid run_command payload');
     return;
   }
   if (command === null) return;
 
-  const guardPayload = buildGuardPayload(payload, command);
   const args = ['hook', '--harness', 'codex'];
   if (typeof payload.project_root === 'string' && payload.project_root) {
     args.push('--workspace', payload.project_root);
@@ -186,6 +208,7 @@ export async function main() {
     encoding: 'utf8',
     timeout: GUARD_TIMEOUT_MS,
     maxBuffer: MAX_STDIN_BYTES,
+    cwd: guardPayload.cwd,
     windowsHide: true,
   });
 
