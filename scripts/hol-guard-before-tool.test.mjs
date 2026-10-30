@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { delimiter, join, resolve } from 'node:path';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -236,6 +236,26 @@ test('Guard executable search excludes relative and empty PATH entries', () => {
   assert.equal(trustedGuardPath(original), [trustedA, trustedB].join(delimiter));
   assert.equal(trustedGuardPath('.'), '');
   assert.equal(trustedGuardPath(undefined), '');
+});
+
+test('rejects absolute project PATH entries and symlinks into the project', {
+  skip: process.platform === 'win32',
+}, () => {
+  const root = mkdtempSync(join(tmpdir(), 'klaat-guard-absolute-path-'));
+  const project = join(root, 'project');
+  const projectBin = join(project, 'bin');
+  const trustedBin = join(root, 'trusted-bin');
+  const linkedProjectBin = join(root, 'linked-project-bin');
+  mkdirSync(projectBin, { recursive: true });
+  mkdirSync(trustedBin);
+  symlinkSync(projectBin, linkedProjectBin, 'dir');
+  try {
+    const options = [projectBin, linkedProjectBin, trustedBin].join(delimiter);
+    assert.equal(trustedGuardPath(options, [project]), trustedBin);
+    assert.equal(trustedGuardPath(projectBin, [project]), '');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('project-local fake hol-guard cannot shadow a trusted PATH executable', {
