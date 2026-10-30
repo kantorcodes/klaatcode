@@ -20,17 +20,21 @@ export function trustedGuardPath(pathValue, untrustedRoots = []) {
       try { return realpathSync(root); } catch { return resolve(root); }
     });
   return pathValue.split(delimiter)
-    .filter((entry) => {
-      if (!entry || !isAbsolute(entry)) return false;
-      if (!roots.length) return true;
+    .map((entry) => {
+      if (!entry || !isAbsolute(entry)) return null;
+      if (!roots.length) return entry;
       let directory;
-      try { directory = realpathSync(entry); } catch { return false; }
-      return roots.every((root) => {
-        const rel = relative(root, directory);
+      try { directory = realpathSync(entry); } catch { return null; }
+      const outsideRoots = (candidate) => roots.every((root) => {
+        const rel = relative(root, candidate);
         return rel !== '' &&
           (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel));
       });
+      // The alias itself may be project-controlled even if its target is not.
+      // Launch from canonical dirs so a symlink swap cannot rebind Guard.
+      return outsideRoots(entry) && outsideRoots(directory) ? directory : null;
     })
+    .filter((entry) => entry !== null)
     .join(delimiter);
 }
 
