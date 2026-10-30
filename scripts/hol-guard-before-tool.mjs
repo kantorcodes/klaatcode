@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { delimiter, isAbsolute, resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { delimiter, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
@@ -10,10 +11,26 @@ const GUARD_TIMEOUT_MS = 9_000;
 // The hook switches cwd to the tool directory. Relative PATH entries would
 // then resolve there and could select a different, project-local hol-guard.
 // Only absolute search directories may be used for Guard's executable lookup.
-export function trustedGuardPath(pathValue) {
+export function trustedGuardPath(pathValue, untrustedRoots = []) {
   if (typeof pathValue !== 'string') return '';
+  // The project can put a forged hol-guard binary on an *absolute* PATH too.
+  // Resolve links and reject project-owned bin directories before spawning.
+  const roots = untrustedRoots.filter((root) => typeof root === 'string' && isAbsolute(root))
+    .map((root) => {
+      try { return realpathSync(root); } catch { return resolve(root); }
+    });
   return pathValue.split(delimiter)
-    .filter((entry) => entry && isAbsolute(entry))
+    .filter((entry) => {
+      if (!entry || !isAbsolute(entry)) return false;
+      if (!roots.length) return true;
+      let directory;
+      try { directory = realpathSync(entry); } catch { return false; }
+      return roots.every((root) => {
+        const rel = relative(root, directory);
+        return rel !== '' &&
+          (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel));
+      });
+    })
     .join(delimiter);
 }
 
@@ -261,7 +278,10 @@ export async function main() {
   args.push('--json');
 
   const guardPathKey = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH');
-  const guardPath = trustedGuardPath(guardPathKey ? process.env[guardPathKey] : '');
+  const guardPath = trustedGuardPath(
+    guardPathKey ? process.env[guardPathKey] : '',
+    [payload.project_root, guardPayload.cwd],
+  );
   if (!guardPath) {
     block('HOL Guard needs an absolute trusted executable search path.');
     return;
