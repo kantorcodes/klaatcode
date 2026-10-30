@@ -31,9 +31,21 @@ export function trustedGuardPath(pathValue, untrustedRoots = []) {
         return rel !== '' &&
           (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel));
       });
-      // The alias itself may be project-controlled even if its target is not.
-      // Launch from canonical dirs so a symlink swap cannot rebind Guard.
-      return outsideRoots(entry) && outsideRoots(directory) ? directory : null;
+      // Reject a project-owned executable hidden behind a globally located
+      // PATH symlink. Filtering only directory links would still run the shim.
+      if (!outsideRoots(entry) || !outsideRoots(directory)) return null;
+      for (const name of ['hol-guard', 'hol-guard.exe']) {
+        const executable = resolve(directory, name);
+        try {
+          const target = realpathSync(executable);
+          if (!outsideRoots(executable) || !outsideRoots(target)) return null;
+        } catch (error) {
+          // A missing executable lets spawn search later PATH entries.
+          // Other lookup failures cannot establish a trusted executable.
+          if (error?.code !== 'ENOENT') return null;
+        }
+      }
+      return directory;
     })
     .filter((entry) => entry !== null)
     .join(delimiter);
