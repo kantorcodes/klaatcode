@@ -282,6 +282,29 @@ test('rejects absolute project PATH entries and symlinks into the project', {
   }
 });
 
+test('rejects executable symlinks that point into a project', { skip: process.platform === 'win32' }, () => {
+  const temp = mkdtempSync(join(tmpdir(), 'klaat-guard-executable-link-'));
+  try {
+    const project = join(temp, 'project');
+    const externalBin = join(temp, 'external-bin');
+    mkdirSync(project);
+    mkdirSync(externalBin);
+    const projectShim = join(project, 'hol-guard');
+    writeFileSync(projectShim, '#!/bin/sh\\nexit 0\\n');
+    chmodSync(projectShim, 0o755);
+    // Directory is outside the repo, but its executable points into it.
+    symlinkSync(projectShim, join(externalBin, 'hol-guard'));
+    assert.equal(trustedGuardPath(externalBin, [project]), '');
+    // An actual executable outside the project remains eligible.
+    rmSync(join(externalBin, 'hol-guard'));
+    writeFileSync(join(externalBin, 'hol-guard'), '#!/bin/sh\\nexit 0\\n');
+    chmodSync(join(externalBin, 'hol-guard'), 0o755);
+    assert.equal(trustedGuardPath(externalBin, [project]), realpathSync(externalBin));
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
 test('project-local fake hol-guard cannot shadow a trusted PATH executable', {
   skip: process.platform === 'win32',
 }, () => {
