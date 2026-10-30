@@ -11,6 +11,7 @@ import {
   decisionFromGuardResponse,
   extractKlaatCommand,
   parseGuardJson,
+  parseGuardBytes,
   trustedGuardPath,
 } from './hol-guard-before-tool.mjs';
 
@@ -152,6 +153,29 @@ test('rejects repeated authoritative Guard keys, including escaped duplicates', 
   }
   const valid = '{"notes":["repeated","repeated"],"policy_action":"allow","reason_code":"native_policy_allow","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}';
   assert.deepEqual(parseGuardJson(valid), JSON.parse(valid));
+});
+
+test('rejects invalid UTF-8 native Guard bytes even when decoding would look like allow', () => {
+  const allowed = JSON.stringify({
+    policy_action: 'allow',
+    reason_code: 'native_policy_allow',
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' },
+    diagnostic: 'ok',
+  });
+  const valid = Buffer.from(allowed, 'utf8');
+  assert.equal(parseGuardBytes(valid)?.policy_action, 'allow');
+
+  const marker = allowed.lastIndexOf('ok');
+  assert.ok(marker > 0);
+  const invalid = Buffer.concat([
+    Buffer.from(allowed.slice(0, marker), 'utf8'),
+    Buffer.from([0xff]),
+    Buffer.from(allowed.slice(marker + 2), 'utf8'),
+  ]);
+  // Default Node decoding would replace the invalid byte and still parse an allow.
+  assert.equal(JSON.parse(invalid.toString('utf8')).policy_action, 'allow');
+  assert.equal(parseGuardBytes(invalid), null);
+  assert.equal(parseGuardBytes(allowed), null);
 });
 
 test('explicit stop fields override otherwise authoritative allows', () => {
