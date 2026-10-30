@@ -26,6 +26,27 @@ test('ignores unrelated hook events defensively', () => {
   assert.equal(extractKlaatCommand({ event: 'after_tool', tool_name: 'run_command', tool_args: '{}' }), null);
 });
 
+test('denies missing event and pre-tool identity instead of bypassing Guard', () => {
+  for (const payload of [
+    null,
+    [],
+    {},
+    { event: null, tool_name: 'run_command' },
+    { event: '', tool_name: 'run_command' },
+    { event: 'before_tool' },
+    { event: 'before_tool', tool_name: null },
+    { event: 'before_tool', tool_name: '' },
+    { event: 'before_tool', tool_name: 42 },
+  ]) {
+    assert.throws(() => extractKlaatCommand(payload));
+  }
+  assert.equal(extractKlaatCommand({
+    event: 'before_tool',
+    tool_name: 'read_file',
+    tool_args: '{}',
+  }), null);
+});
+
 test('fails closed on malformed run_command input', () => {
   assert.throws(() => extractKlaatCommand({
     event: 'before_tool',
