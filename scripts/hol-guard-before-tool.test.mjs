@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { delimiter, join, resolve } from 'node:path';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -251,7 +251,7 @@ test('rejects absolute project PATH entries and symlinks into the project', {
   symlinkSync(projectBin, linkedProjectBin, 'dir');
   try {
     const options = [projectBin, linkedProjectBin, trustedBin].join(delimiter);
-    assert.equal(trustedGuardPath(options, [project]), trustedBin);
+    assert.equal(trustedGuardPath(options, [project]), realpathSync(trustedBin));
     assert.equal(trustedGuardPath(projectBin, [project]), '');
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -298,6 +298,29 @@ test('project-local fake hol-guard cannot shadow a trusted PATH executable', {
     });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(JSON.parse(result.stdout.trim()).decision, 'block');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects project-controlled PATH link to trusted Guard directory', {
+  skip: process.platform === 'win32',
+}, () => {
+  const root = mkdtempSync(join(tmpdir(), 'klaat-guard-link-spoof-'));
+  const project = join(root, 'project');
+  const trusted = join(root, 'trusted-bin');
+  const outsideAlias = join(root, 'trusted-alias');
+  const worktreeAlias = join(project, 'guard-bin-alias');
+  mkdirSync(project);
+  mkdirSync(trusted);
+  symlinkSync(trusted, outsideAlias, 'dir');
+  symlinkSync(trusted, worktreeAlias, 'dir');
+  try {
+    assert.equal(trustedGuardPath(worktreeAlias, [project]), '');
+    const sanitized = trustedGuardPath([worktreeAlias, outsideAlias].join(delimiter), [project]);
+    // The project can retarget its own link, while trusted aliases resolve to
+    // fixed canonical directories before spawn.
+    assert.equal(sanitized, realpathSync(trusted));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
