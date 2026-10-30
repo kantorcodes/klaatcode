@@ -55,12 +55,19 @@ function block(reason) {
 }
 
 export function extractKlaatCommand(payload) {
-  if (!payload || typeof payload !== 'object') {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error('invalid Klaat hook payload');
   }
-  if (payload.event !== 'before_tool' || payload.tool_name !== 'run_command') {
-    return null;
+  // An invalid event or unnamed pre-tool action is not proof that the
+  // pending action is unrelated to run_command. Fail closed before dispatch.
+  if (typeof payload.event !== 'string' || !payload.event.trim()) {
+    throw new Error('Klaat hook event is missing');
   }
+  if (payload.event !== 'before_tool') return null;
+  if (typeof payload.tool_name !== 'string' || !payload.tool_name.trim()) {
+    throw new Error('before_tool identity is missing');
+  }
+  if (payload.tool_name !== 'run_command') return null;
   if (typeof payload.tool_args !== 'string') {
     throw new Error('run_command tool_args must be a JSON string');
   }
