@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { TextDecoder } from 'node:util';
 import { delimiter, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
@@ -191,6 +192,17 @@ export function parseGuardJson(stdout) {
   }
 }
 
+// Node's default UTF-8 decoding replaces invalid bytes, which could turn a
+// malformed native verdict into valid allow-shaped JSON. Reject the bytes.
+export function parseGuardBytes(bytes) {
+  if (!Buffer.isBuffer(bytes)) return null;
+  try {
+    return parseGuardJson(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    return null;
+  }
+}
+
 export function decisionFromGuardResponse(response) {
   if (!response || typeof response !== 'object' || Array.isArray(response)) {
     return { allow: false, reason: 'HOL Guard returned an invalid response.' };
@@ -298,7 +310,6 @@ export async function main() {
 
   const result = spawnSync('hol-guard', args, {
     input: `${JSON.stringify(guardPayload)}\n`,
-    encoding: 'utf8',
     timeout: GUARD_TIMEOUT_MS,
     maxBuffer: MAX_STDIN_BYTES,
     cwd: guardPayload.cwd,
@@ -311,7 +322,7 @@ export async function main() {
     return;
   }
 
-  const response = parseGuardJson(result.stdout);
+  const response = parseGuardBytes(result.stdout);
   const decision = decisionFromGuardResponse(response);
   if (!decision.allow) block(decision.reason);
 }
